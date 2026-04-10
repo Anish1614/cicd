@@ -4,44 +4,41 @@ pipeline {
     environment {
         // Define Docker registry repository
         DOCKER_IMAGE = 'devopsjenkins1614/cicd'
-        
-        // Ensure you have configured Docker Hub credentials in Jenkins with this ID
-        // Dashboard > Manage Jenkins > Credentials > System > Global credentials > Add Credentials
-        // Kind: Username with password
-        // ID: dockerhub-credentials
-        DOCKER_REGISTRY_CREDENTIALS = 'dockerhub-credentials' 
+        // Hardcoded credentials for testing purposes
+        DOCKER_USER = 'devopsjenkins1614'
+        DOCKER_PASS = 'Anish@399'
     }
 
     stages {
         stage('Checkout') {
             steps {
-                // Checkout code from source control
-                checkout scm
+                // Checkout code from public github repo
+                git branch: 'main', url: 'https://github.com/Anish1614/cicd'
             }
         }
 
         stage('Test') {
-            // Run tests inside a Python Docker container so the Jenkins host doesn't need Python installed
-            agent {
-                docker { 
-                    image 'python:3.11-slim' 
-                    reuseNode true
-                }
-            }
             steps {
-                // Determine if this is running on Windows (bat) or Linux (sh) for the host
-                script {
-                    isUnix() ? sh('pip install -r requirements.txt && pytest') : bat('pip install -r requirements.txt && pytest')
-                }
+                // Jenkins host (Ubuntu 24.04) has python3 installed natively
+                // Use a virtual environment to avoid PEP 668 restrictions on global pip
+                sh '''
+                    python3 -m venv venv
+                    . venv/bin/activate
+                    pip install -r requirements.txt
+                    pytest
+                '''
             }
         }
 
         stage('Build Image') {
             steps {
                 script {
-                    echo "Building Docker image: ${DOCKER_IMAGE}:${env.BUILD_ID}"
-                    // Build the docker image
-                    customImage = docker.build("${DOCKER_IMAGE}:${env.BUILD_ID}")
+                    // Generate a timestamp for the image tag
+                    env.IMAGE_TAG = sh(script: "date +'%Y%m%d%H%M%S'", returnStdout: true).trim()
+                    echo "Building Docker image: ${env.DOCKER_IMAGE}:${env.IMAGE_TAG}"
+                    
+                    // Build the docker image using standard docker shell commands
+                    sh 'docker build -t "${DOCKER_IMAGE}:${IMAGE_TAG}" .'
                 }
             }
         }
@@ -49,30 +46,36 @@ pipeline {
         stage('Push Image') {
             steps {
                 script {
-                    echo "Pushing Docker image to Docker Hub"
-                    docker.withRegistry('', DOCKER_REGISTRY_CREDENTIALS) {
-                        // Push the image with the build ID tag
-                        customImage.push()
-                        // Push the latest tag
-                        customImage.push('latest')
-                    }
+                    echo "Pushing Docker image to Docker Hub using standard shell commands"
+                    
+                    sh '''
+                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                        
+                        # Push the timestamped tag
+                        docker push "${DOCKER_IMAGE}:${IMAGE_TAG}"
+                        
+                        # Tag as latest and push
+                        docker tag "${DOCKER_IMAGE}:${IMAGE_TAG}" "${DOCKER_IMAGE}:latest"
+                        docker push "${DOCKER_IMAGE}:latest"
+                    '''
                 }
             }
         }
     }
 
-    post {
-        always {
-            // Clean workspace after pipeline completion
-            cleanWs()
-            // Clean up left over images locally
-            script {
-                try {
-                    isUnix() ? sh("docker rmi ${DOCKER_IMAGE}:${env.BUILD_ID} || true") : bat("docker rmi ${DOCKER_IMAGE}:${env.BUILD_ID} || exit 0")
-                } catch (Exception e) {
-                    echo "Skipping docker rmi cleanup"
-                }
-            }
-        }
-    }
+    // post {
+    //     always {
+    //         // Clean workspace after pipeline completion
+    //         cleanWs()
+    //         // Clean up left over images locally
+    //         script {
+    //             try {
+    //                 sh 'docker rmi "${DOCKER_IMAGE}:${IMAGE_TAG}" || true'
+    //                 sh 'docker rmi "${DOCKER_IMAGE}:latest" || true'
+    //             } catch (Exception e) {
+    //                 echo "Skipping docker rmi cleanup"
+    //             }
+    //         }
+    //     }
+    // }
 }
