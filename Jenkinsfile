@@ -6,7 +6,7 @@ pipeline {
         DOCKER_IMAGE = 'devopsjenkins1614/cicd'
         // Hardcoded credentials for testing purposes
         DOCKER_USER = 'devopsjenkins1614'
-        DOCKER_PASS = 'Anish@399'
+        DOCKER_PASS = '*******'
     }
 
     stages {
@@ -63,19 +63,19 @@ pipeline {
         }
     }
 
-    // post {
-    //     always {
-    //         // Clean workspace after pipeline completion
-    //         cleanWs()
-    //         // Clean up left over images locally
-    //         script {
-    //             try {
-    //                 sh 'docker rmi "${DOCKER_IMAGE}:${IMAGE_TAG}" || true'
-    //                 sh 'docker rmi "${DOCKER_IMAGE}:latest" || true'
-    //             } catch (Exception e) {
-    //                 echo "Skipping docker rmi cleanup"
-    //             }
-    //         }
-    //     }
-    // }
+    post {
+        always {
+            // Clean workspace after pipeline completion
+            cleanWs()
+            // Clean up left over images locally
+            script {
+                try {
+                    sh 'docker rmi "${DOCKER_IMAGE}:${IMAGE_TAG}" || true'
+                    sh 'docker rmi "${DOCKER_IMAGE}:latest" || true'
+                } catch (Exception e) {
+                    echo "Skipping docker rmi cleanup"
+                }
+            }
+        }
+    }
 }
